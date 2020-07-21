@@ -1,10 +1,6 @@
 # Project
 
-# Hi Darren,
-#
-# Thanks for taking the call on Friday. As promised here is the email outlining
-# the study.
-#
+
 # I have attached a word document I use to template/organise my thoughts for any
 # given study, and further detail is available in that.
 #
@@ -13,7 +9,6 @@
 # organism (MDRO).
 #
 # Examples of these MDROs include MRSA/VRE etc.
-#
 #
 # In order to prevent other patients from being colonised/cross contaminated by
 # such organisms “MDRO patients” are isolated within the hospital i.e. put into
@@ -30,14 +25,11 @@
 # comprehensive, prospectively collected data set). It’s time to drive on with
 # the study.
 #
-#
 # Primary outcomes: Time to theatre for hip fracture Fixation, Time to ward bed
 # from emergency department
 #
 # Secondary outcomes: Thirty day mortality, local cost analysis (we have more
 # detailed data for waterford)
-#
-#
 #
 # In addition to my word document I have attached the data file.
 #
@@ -55,11 +47,8 @@
 # The third tab is waterford hip fractures….these will hopefully form part of a
 # secondary cost analysis depending how the study goes.
 #
-#
-#
 # Finally, I have attached 3 other papers which have run similar analysis to
 # give you an idea of what we are after.
-#
 #
 # I’m really looking forward to working with you on this. I’m excited by this
 # project as I think it will arm us with information that will allow us to
