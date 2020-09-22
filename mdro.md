@@ -66,7 +66,10 @@ Doing this takes the sample from 13560 to 13003 patients (71.77% of the original
 
 
 
-![](mdro_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
+
+
+
+![](mdro_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
 
 ## Table 1
 
@@ -80,7 +83,7 @@ Doing this takes the sample from 13560 to 13003 patients (71.77% of the original
 
 
 
-![](mdro_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
 Proportion AE to surgery >= 48 hours (compare survival proportions)
 
@@ -735,7 +738,9 @@ Times from AE (the total times)
 
 
 
-![](mdro_files/figure-html/unnamed-chunk-12-1.png)<!-- -->
+
+![](mdro_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
+Note: y axis truncated at 240 hours. 
 
 ## Table 1
 
@@ -746,7 +751,7 @@ Times from AE (the total times)
 
 ### KM Plots (crude)
 
-![](mdro_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-16-1.png)<!-- -->
 
 Proportion >= 48 hours (compare survival proportions)
 
@@ -1395,41 +1400,41 @@ The notable result in the table above is that there is MDRO status is associated
 
 Here is the KM plot for that unadjusted effect in the 1694 patients on the alternative pathway. 
 
-![](mdro_files/figure-html/unnamed-chunk-17-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-19-1.png)<!-- -->
 
 However, this is really explained by hospital. 
 
 First, here is the KM plot for hospital for patients on the alterntive pathway. 
 
-![](mdro_files/figure-html/unnamed-chunk-18-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-20-1.png)<!-- -->
 
 You can see that the Mater and Drogheda are outliers with longer times to ward, and Tullamore and Connolly have relatively shorter times. 
 
 Now, if we look at the MDRO status of patients on the alt path in each hospital, ordered by their median times to ward (as they are ordered in the KM plot above), we see that a disproportionate number of MDRO cases happen to be in the hospitals with longer times. 
 
-![](mdro_files/figure-html/unnamed-chunk-19-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-21-1.png)<!-- -->
 
 So the main issue here is that Mater and Drogheda, which both have > average % of MDRO also have longer delays in getting to the ward. Meanwhile Connolly has no mdro on the alt path and Midland has the average %, but they have relatively shorter time to ward. 
 
 Here is the same info, but now with patient level times to ward plotted. 
 
-![](mdro_files/figure-html/unnamed-chunk-20-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-22-1.png)<!-- -->
 
 This is the same plot, but with times log10 transformed so we can see them better.
 
-![](mdro_files/figure-html/unnamed-chunk-21-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-23-1.png)<!-- -->
 
 Just for comparison, you can see that the times to surgery (all capped at < 5 days) aren't as variable, and so the impact of adjusting the Cox models for hospital isn't a prominent when AE to Surgery is the outcome. 
 
-![](mdro_files/figure-html/unnamed-chunk-22-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-24-1.png)<!-- -->
 
 Same idea, reflected in the KM plot (less variability in time to surgery by hospital)
 
-![](mdro_files/figure-html/unnamed-chunk-23-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-25-1.png)<!-- -->
 
 And a much smaller effect to start with (unadjusted KN plot for time to surgery by MDRO status in patients on the alternative path)
 
-![](mdro_files/figure-html/unnamed-chunk-24-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-26-1.png)<!-- -->
 
 
 
@@ -1437,7 +1442,7 @@ And a much smaller effect to start with (unadjusted KN plot for time to surgery 
 
 
 MDRO status by pathway
-![](mdro_files/figure-html/unnamed-chunk-25-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-27-1.png)<!-- -->
 
 
 -----------------------------------------------
@@ -1450,7 +1455,7 @@ MDRO status by pathway
 
 
 Relative number of patients on each pathway (n = 13003 patients with no missing time values and AE to surgery < 5 days)
-![](mdro_files/figure-html/unnamed-chunk-27-1.png)<!-- -->
+![](mdro_files/figure-html/unnamed-chunk-29-1.png)<!-- -->
 
 
 Logistic model for odds of surg > 48 hours for patients on the main pathyway
