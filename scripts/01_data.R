@@ -34,6 +34,9 @@
     if(any(grepl("Z06", data[i, tar_diag]))){data$mdro[i] <- "Yes"}
     else{data$mdro[i] <- "No"}
   }
+  data$mdro <- factor(data$mdro) 
+ 
+  
   
   # Repeat for anticoagulants (ICD-10: Z92)
   data$anticoag <- NA # Ditto for anticoag
@@ -41,6 +44,7 @@
     if(any(grepl("Z92", data[i, tar_diag]))){data$anticoag[i] <- "Yes"}
     else{data$anticoag[i] <- "No"}
   }
+  data$anticoag <- factor(data$anticoag) 
   
 
 # Timing ----
@@ -99,13 +103,66 @@
   data$adm_leave_ae_diff[data$adm_leave_ae_diff < 0] <- NA
   
   
-select(data, adm_date, adm_ae_date_time, adm_leave_ae_diff,
-       adm_ae_dis_date_time, dis_date) %>%
-  filter(data$adm_leave_ae_diff > 10) %>%
-  View()
+# select(data, adm_date, adm_ae_date_time, adm_leave_ae_diff,
+#        adm_ae_dis_date_time, dis_date) %>%
+#   filter(data$adm_leave_ae_diff > 10) %>%
+#   View
   
+  data <- remove_constant(data)
   
-
+# Remove if missing almost everything
+  
+  tar <- map_lgl(data, function(x) table(!is.na(x))["TRUE"] > 10)
+  data <- data[tar]
+  
+  hosplabs <- c(
+    "Connolly Hospital",
+    "Midland regional Hospital Tullamore",
+    "University Hospital Limerick",
+    "Letterkenny University Hospital",
+    "Sligo University Hospital",
+    "University Hospital Waterford",
+    "Cork University Hospital",
+    "University Hospital Kerry",
+    "Galway University Hospital",
+    "Mayo University Hospital",
+    "St. James’s Hospital, Dublin",
+    "Mater Hospital",
+    "St. Vincents University Hospital",
+    "OLOL Drogheda",
+    "Beaumont",
+    "Tallaght"
+  )
+  
+  data$hosp <- factor(data$hosp, labels = hosplabs)
+  data$hosp <- relevel(data$hosp, ref = "University Hospital Waterford")
+  
+  data$sex <- factor(data$sex, labels = c("Male", "Female"))
+  
+  labs <- c(
+    "No/No", 
+    "Yes/No", 
+    "No/Yes", 
+    "Yes/Yes"
+  )
+  
+  data <- mutate(
+    data,
+    mdro_anticoag = interaction(mdro, anticoag), 
+    mdro_anticoag = factor(mdro_anticoag, labels = labs)
+  )
+  
+  data$has_med_card[data$has_med_card == 2] <- NA
+  data$adm_asa_grade[data$adm_asa_grade == 9] <- NA
+  
+  data$has_med_card <- factor(data$has_med_card, labels = c("No", "Yes"))
+  data$marr_status <- factor(data$marr_status)
+  data$adm_asa_grade <- ordered(data$adm_asa_grade)
+  
+  data$year <- data$adm_primary_surgery_date_time
+  
+  tar <- map_lgl(data, function(x)table(is.na(x))["FALSE"]/sum(table(is.na(x))) > 0.5)
+  data <- data[tar]
   
 # Save data --------------------------------------------------------------------
   

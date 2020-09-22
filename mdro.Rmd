@@ -15,163 +15,119 @@ output:
   knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, 
                         fig.width  = 6 * 1.67, fig.height = 6)
 
-  load("data/data.RData")
 
-  library(descr)
+  load("data/data.RData")
+  source("scripts/functions.R")
+
   library(tidyverse)
+  library(descr)
   library(viridis)
   library(flextable)
-  
+  library(knitr)
+  library(pander)
+  library(sjPlot)
+  library(rms)
+  library(Hmisc)
+  library(patchwork)
+  library(survival)
+  library(survminer)
+# library(ggtern)
+
 ```
 
 
-TLDR: There are hip patients who are known carriers but not necessarily infected with a multi-drug resistant organism (MDRO). In order to prevent other patients from being colonised/cross contaminated by such organisms “MDRO patients” are isolated within the hospital. This really limits this cohort of patients’ access to basic care. Anecdotally they wait for much longer to get a bed on the ward and are left on trollies in ED far longer and also have to wait much longer to get to theatre for their broken hip…..but nobody has shown this.
+# Main Sample
 
-Primary outcomes: Time to theatre for hip fracture Fixation, Time to ward bed from emergency department
+The overall dataset includes `r nrow(data)` patients. Of these, only `r table(is.na(data$adm_primary_surgery_date_time))["TRUE"]` (`r round(table(is.na(data$adm_primary_surgery_date_time))["TRUE"] / nrow(data) * 100, 2)`%) are missing a surgery time, so these patients are removed from the dataset. 
 
-Secondary outcomes: Thirty day mortality, local cost analysis (we have more detailed data for waterford)
+```{r filter_surg}
 
-Key variables in the dataset:
+  data_1_surg <- filter(data, !is.na(adm_primary_surgery_date_time)) # loses 892
+  data_1_surg$out <- 1 # Flag for having surgery
 
-**adm_trauma_date_time**: Date & Time of Trauma causing Hip Fracture
+```
 
-**adm_date**: admission date
+There are different pathways that patients take, starting with their injury and leading up to their surgery. This could include multiple hospitals, ED visits, etc. However, the *main* pathway should be described by the following times:
 
-**adm_ae_dis_date_time**: Date and time of leaving ED for operating hospital *(key data piece for this study as often MDROs patients are stuck in EDs waiting for isolation beds)*
+- Time of Arrival to AE of treating Hospital (adm_ae_date_time)
+- Time of Arrival to Ortho Ward (adm_orth_ward_date_time)
+- Time of Surgery (adm_primary_surgery_date_time)
+- Discharge date (dis_date)
 
-**adm_first_pres_hosp_date_time**: Date and time of arrival at first presenting hospital (not all hospitals have orthopaedics  e.g. if a patient presents to Kilkenny hospital and is subsequently transferred to Waterford for fixation -this time represents date/time of presentation to Kilkenny hospital)
+Then there is a second, *alternative* pathway that is arrival -> orth -> surg -> discharge.   
 
-**adm_ae_date_time**: Date and time of arrival to operating (orthopaedic) hospital
- 
-**adm_trauma_team_date_time**: Date & time seen by orthopaedic team in operating hospital
- 
-**adm_orth_ward_date_time**: Date & time admission to an orthopaedic ward *(Again a key piece of data here as often MDRO patients are delayed getting to ortho wards)*
- 
-**adm_primary_surgery_date_time**: Date & Time of primary surgery for hip fracture *this is one of our key outcomes (our hypothesis is that this is delayed in MDRO patients)*
- 
-**dis_date**: discharge date
+At this point, to cover both of these pathways, we restrict the analysis to the patients with values for all 4 relevant time points. 
 
-**adm_ger_acute_assess_date_time**: Date & Time of assessment by geriatrician during acute admission
- 
- 
-# Missing data for time variables
-
-We need to establish how accurate the relevant dates are, so that we can feel confident they accurately reflect the relevant time variables we want to create. So the first step is just to try and look at them. 
-
-Here are the missing values for each time variable.  
-
-```{r}
+```{r filter_times}
 
   target_times <- c(
-   "adm_trauma_date_time", "adm_ae_dis_date_time", 
-   "adm_first_pres_hosp_date_time", "adm_ae_date_time", "adm_date", 
-   "adm_trauma_team_date_time", "adm_orth_ward_date_time", 
-   "adm_primary_surgery_date_time", "dis_date"
+    "adm_ae_date_time",            
+    "adm_orth_ward_date_time", 
+    "adm_primary_surgery_date_time", 
+    "dis_date"
   )
 
-  missing <- data_frame(
-    var = target_times, 
-    not_missing = unlist(
-      map(data[target_times], function(x)table(!is.na(x))["TRUE"])
+  cases <- complete.cases(data_1_surg[c("id", target_times)])
+  tar <- data_1_surg[c("id", target_times)][cases, ]$id
+
+  data_2_times <- filter(data_1_surg, id %in% tar) # 3553
+  
+```
+
+Doing this takes the sample from `r nrow(data_1_surg)` to `r nrow(data_2_times)` patients (`r round(nrow(data_2_times) / nrow(data) * 100, 2)`% of the original dataset of `r nrow(data)` patients). 
+
+
+```{r define_pathways}
+
+# Create flags for the 2 pathways
+
+  path_1 <- filter(
+    data_2_times, 
+    adm_ae_date_time < adm_orth_ward_date_time & 
+    adm_orth_ward_date_time < adm_primary_surgery_date_time &
+    adm_primary_surgery_date_time < dis_date
+    )
+# length(path_1$id) == length(unique(path_1$id))
+  
+  data_2_times$path_1 <- "No"
+  data_2_times$path_1[data_2_times$id %in% path_1$id] <- "Yes"
+# table(data_2_times$path_1)
+  
+  path_2 <- filter(
+    data_2_times, 
+    adm_ae_date_time < adm_primary_surgery_date_time & 
+    adm_primary_surgery_date_time < adm_orth_ward_date_time &
+    adm_orth_ward_date_time < dis_date
+    )
+# length(path_2$id) == length(unique(path_2$id))
+  
+  data_2_times$path_2 <- "No"
+  data_2_times$path_2[data_2_times$id %in% path_2$id] <- "Yes"
+# table(data_2_times$path_2)
+  
+  data_2_times <- data_2_times %>%
+    mutate(
+      pathway = case_when(
+        path_1 == "Yes" ~ "Main Pathway", 
+        path_2 == "Yes" ~ "Alternative Pathway"
       )
-    ) %>%
-    mutate(missing_pct = round(1 - (not_missing/18118), 3) * 100, 
-           var = reorder(var, missing_pct))
-  
-  ggplot(missing, aes(x = var, y = missing_pct, fill = missing_pct)) +
-    geom_bar(stat = "identity") +
-    xlab("") +
-    ylab("Percent Missing") +
-    coord_flip() +
-    scale_fill_viridis(guide = FALSE, end = 0.4)
-
-  
-```
-
-Below we relate each of these event times to the admission date/time (with no missing values), finding that several of them are likely to fall both before (in some patients) and after (in others) the admission time. 
-
-```{r}
-
-  timing <- data_frame()
-  for(i in target_times){
-    
-    n1 <- nrow(filter(data, get(i) < adm_date)) 
-    n2 <- nrow(filter(data, get(i) > adm_date)) 
-    n3 <- nrow(filter(data, get(i) == adm_date)) 
-    
-    timing <- bind_rows(
-      data_frame(
-        var = i, 
-        timing =  c(rep("< adm_date", n1), 
-                    rep("> adm_date", n2), 
-                    rep("= adm_date", n3))
-      ),
-      timing
     )
-  }
-
-  ggplot(timing, aes(x = var, fill = timing)) +
-    geom_bar(position = "fill") +
-    scale_fill_viridis(discrete = TRUE, end = 0.7) +
-    ylab("Proportion of times") +
-    xlab("") +
-    coord_flip()
   
+  rm(path_1, path_2)
+  
+  data_3_paths <- filter(data_2_times, !is.na(pathway))
 
 ```
 
-Repeat the same thing for discharge times. 
+Then we delete those patients with complete times but that don't fall onto one of the two paths, taking the dataset from `r nrow(data_2_times)` to `r nrow(data_3_paths)` patients. Of these, `r table(data_3_paths$path_1)["Yes"]` patients are on the main path; and `r table(data_3_paths$path_2)["Yes"]` are on the alternative path. 
 
+Just to confirm the dates are in the right order:
+
+Main path (n = `r table(data_3_paths$path_1)["Yes"]`)
 ```{r}
 
-  timing <- data_frame()
-  for(i in target_times){
-    
-    n1 <- nrow(filter(data, get(i) < dis_date)) 
-    n2 <- nrow(filter(data, get(i) > dis_date)) 
-    n3 <- nrow(filter(data, get(i) == dis_date)) 
-    
-    timing <- bind_rows(
-      data_frame(
-        var = i, 
-        timing =  c(rep("< dis_date", n1), 
-                    rep("> dis_date", n2), 
-                    rep("= dis_date", n3))
-      ),
-      timing
-    )
-  }
-
-  ggplot(timing, aes(x = var, fill = timing)) +
-    geom_bar(position = "fill") +
-    scale_fill_viridis(discrete = TRUE, end = 0.7) +
-    ylab("Proportion of times") +
-    xlab("") +
-    coord_flip() 
-  
-
-```
-
-Based on these, I'd probably just stop condsidering *adm_ae_date_time*, *adm_trauma_date_time*, and *adm_first_pres_hosp_date_time* (unless there is some way to explain these findings). Just as a reminder, these were:
-
-**adm_trauma_date_time**: Date & Time of Trauma causing Hip Fracture
-
-**adm_ae_date_time**: Date and time of arrival to operating (orthopaedic) hospital
-
-**adm_first_pres_hosp_date_time**: Date and time of arrival at first presenting hospital (not all hospitals have orthopaedics  e.g. if a patient presents to Kilkenny hospital and is subsequently transferred to Waterford for fixation -this time represents date/time of presentation to Kilkenny hospital)
-
-And then we will also remove *adm_trauma_team_date_time* since so many are missing. 
- 
-Now we can look at what order these different events tend to come in. In the plot below, each little point is a person, showing the order that a given event appeared. For example, for most, but not all, the *adm_date* was the first, the *adm_ae_dis_date_time* second, *adm_orth_ward_date_time* third, *adm_primary_surgery_date_time* fourth, and the *dis_date* 5th (of all the patients, only 6 had all 6 of these dates, so you can't see them on the plot).
-```{r}
-
-# Remove these tricky times identified above
-  target_times_2 <- c(
-     "adm_ae_dis_date_time", "adm_date", "adm_orth_ward_date_time",
-     "adm_primary_surgery_date_time", "dis_date"
-    )
-
-  long_times <- select(data, id, target_times_2) %>%
+  filter(data_3_paths, path_1 == "Yes") %>%
+  select(id, target_times) %>%
     gather(event, date, -id) %>%
     arrange(id, date) %>%
     group_by(id) %>%
@@ -181,182 +137,647 @@ Now we can look at what order these different events tend to come in. In the plo
     group_by(event) %>%
     mutate(mean_order = mean(order)) %>%
     ungroup() %>%
-    mutate(event = reorder(event, mean_order))
-
-  
-```
-
-```{r}
-
-  ggplot(long_times, aes(x = order, y = event, color = event)) +
-    geom_jitter(size = 0.1, alpha = 0.2) +
+    mutate(event = reorder(event, mean_order)) %>% 
+  ggplot(aes(x = order, y = event, color = event)) +
+    geom_jitter(size = 1, alpha = 0.2) +
     scale_color_viridis(guide = FALSE, discrete = TRUE) +
-    scale_x_continuous(breaks = 1:9) +
     theme_minimal() +
     theme(panel.grid = element_blank())
 
 ```
 
-Here are the same data as a filled (proportional) bar chart. 
-
+Alternative path (n = `r table(data_3_paths$path_2)["Yes"]`)
 ```{r}
 
-  ggplot(long_times, aes(x = event, fill = factor(order))) +
-    geom_bar(position = position_fill(reverse = TRUE)) +
-    scale_fill_viridis("Order", discrete = TRUE) +
-    coord_flip() +
-    theme(panel.grid = element_blank())
-
-```
-Importantly, the plots above include people that don't have all 5 of these event times in their record. So here is what it looks like if we restrict the data to those with all 5 events. 
-
-```{r}
-
-  ids <- unique(filter(long_times, order == 5)$id)
-  long_times_2 <- filter(long_times, id %in% ids)
-
-```
-
-```{r}
-  ggplot(long_times_2, aes(x = order, y = event, color = event)) +
-    geom_jitter(size = 0.1, alpha = 0.2) +
+  filter(data_3_paths, path_2 == "Yes") %>%
+    select(id, target_times) %>%   
+    gather(event, date, -id) %>%
+    arrange(id, date) %>%
+    group_by(id) %>%
+    mutate(order = row_number()) %>%
+    filter(!is.na(date)) %>%
+    ungroup() %>%
+    group_by(event) %>%
+    mutate(mean_order = mean(order)) %>%
+    ungroup() %>%
+    mutate(event = reorder(event, mean_order)) %>%
+  ggplot(aes(x = order, y = event, color = event)) +
+    geom_jitter(size = 1, alpha = 0.2) +
     scale_color_viridis(guide = FALSE, discrete = TRUE) +
-    scale_x_continuous(breaks = 1:9) +
     theme_minimal() +
     theme(panel.grid = element_blank())
-```
-
-```{r}
-
-  ggplot(long_times_2, aes(x = event, fill = factor(order))) +
-    geom_bar(position = position_fill(reverse = TRUE)) +
-    scale_fill_viridis("Order", discrete = TRUE) +
-    coord_flip() +
-    theme(panel.grid = element_blank())
 
 ```
 
-This reduced dataset includes `r length(unique(long_times_2$id))` of `r nrow(data)` patients (`r round(length(unique(long_times_2$id))/ nrow(data), 3) * 100`%). 
 
+```{r time_outcomes}
 
-# Time to AE
+# Create the all time variables
+  data_3_paths <- mutate(
+    data_3_paths, 
+    ae_orth_diff = difftime( # Path 1 and 2
+        adm_orth_ward_date_time, adm_ae_date_time, units = "hours"
+        ) %>% as.numeric(),
+    orth_surg_diff = difftime( # Path 1 (negative for path 2)
+        adm_primary_surgery_date_time, adm_orth_ward_date_time, units = "hours"
+        ) %>% as.numeric(),
+    ae_surg_diff = difftime( # Path 1 and 2
+        adm_primary_surgery_date_time, adm_ae_date_time, units = "hours"
+        ) %>% as.numeric(),
+    surg_orth_diff = difftime( # Path 2 (negative for path 1)
+        adm_orth_ward_date_time, adm_primary_surgery_date_time, units = "hours"
+        ) %>% as.numeric(),
+    ae_orth_diff = difftime( # Path 1 and 2
+        adm_orth_ward_date_time, adm_ae_date_time, units = "hours"
+        ) %>% as.numeric()
+    )
+        
+```
+
+Finally, we want to remove patients with an AE to surgery time > 120 hours. 
+```{r filter_surg_times}
+
+  data_3_5d <- filter(data_3_paths, ae_surg_diff <= 120) %>%
+    mutate(surg48 = factor(ifelse(ae_surg_diff > 48, "Yes", "No")), 
+           age_z = scale(age, scale = FALSE)) 
+
+```
+
+Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` patients (`r round(nrow(data_3_5d) / nrow(data) * 100, 2)`% of the original dataset of `r nrow(data)` patients). 
 
 ```{r}
-  # target_times <- c(
-  #  "adm_ae_dis_date_time", "adm_ae_date_time", "adm_date"
-  # )
-  # 
-  # # map(data[target_times], function(x)table(is.na(x)))
-  # # table(unlist(map(data[target_times], class)))
-  # 
-  # ae_times <- select(data, id, target_times) %>%
-  #   filter(complete.cases(.)) %>%
-  #   gather(event, date, -id) %>%
-  #   arrange(id, date) %>%
-  #   group_by(id) %>%
-  #   mutate(order = row_number()) %>%
-  #   ungroup() %>%
-  #   group_by(event) %>%
-  #   mutate(mean_order = mean(order)) %>%
-  #   ungroup() %>%
-  #   mutate(event = reorder(event, mean_order))
-  # 
-  # ggplot(ae_times, aes(x = order, y = event, color = event)) +
-  #   geom_jitter(alpha = 0.1) +
-  #   scale_color_viridis(guide = FALSE, discrete = TRUE) +
-  #   scale_x_continuous(breaks = 1:9) +
-  #   theme(panel.grid = element_blank())
-  # 
-  # length(unique(ae_times$id))
+  data_4_pmain_5d <- filter(data_3_5d, path_1 == "Yes") 
 
+  data_4_palt_5d <- filter(data_3_5d, path_2 == "Yes") 
+
+```
+
+
+
+
+# Main pathway analysis (n = `r nrow(data_4_pmain_5d)`)
+
+## Outcomes 
+
+```{r}
+
+  labs <- c("AE to Orth Ward", "Orth Ward to Surgery", "AE to Surgery")
   
+  levs <- c("ae_orth_diff", "orth_surg_diff", "ae_surg_diff")
+
+  data_4_pmain_5d_long <- data_4_pmain_5d %>%
+    select(ae_orth_diff, orth_surg_diff, ae_surg_diff) %>%
+    gather(type, value) %>%
+    mutate(type = factor(type, levels = levs, labels = labs)) 
+
 ```
+
+```{r}
   
-```{r}
-
-  # ggplot(ae_times, aes(x = event, fill = factor(order))) +
-  #   geom_bar(position = position_stack(reverse = TRUE)) +
-  #   scale_fill_viridis("Order", discrete = TRUE) +
-  #   coord_flip() +
-  #   theme(panel.grid = element_blank())
-
+  ggplot(data_4_pmain_5d_long, aes(y = value, x = type)) +
+    geom_jitter(height = 0, width = 0.2, alpha = 0.2) +
+    geom_boxplot(alpha = 0.2, color = "white", size = 1, outlier.alpha = 0) +
+    facet_wrap(~type, nrow = 1, scales = "free_x") +
+    ylab("Hours") +
+    theme(axis.text.x = element_blank(), 
+          panel.grid = element_blank(), 
+          panel.background = element_rect(fill = "grey")) +
+    xlab("")
 ```
 
-```{r}
-
-  # ggplot(data, aes(x = adm_leave_ae_diff, fill = mdro)) +
-  #   geom_density() +
-  #   facet_wrap(~mdro + anticoag)
-  # 
-  # select(data, adm_leave_ae_diff) %>% 
-  #   arrange(adm_leave_ae_diff) %>%
-  #   slice(1:50) %>%
-  #   View()
-  # 
-  # class(data$adm_leave_ae_diff)
-
-```
-
-
-# Time to theatre for hip fracture fixation
+## Table 1
 
 ```{r}
 
-# There is already a time to surgery variable. Does it match if I try to
-# calcuate from the dates?
+  descript <- data_4_pmain_5d %>%
+    select(
+      sex, age, marr_status, 
+      los, has_med_card, adm_asa_grade, 
+      ae_orth_diff, orth_surg_diff, ae_surg_diff, 
+      mdro, anticoag)
 
-  # ggplot(data, aes(x = time_to_surg, y = adm_to_surg, 
-  #                  color = as.Date(as.character(adm_date)))) +
-  #   geom_point(size = 2, alpha = 0.5) +
-  #   scale_color_viridis("Admit date", 
-  #                       begin = 0.2, option = "inferno", trans = "date") +
-  #     theme(panel.background = element_rect(fill = "grey20"),
-  #           panel.grid = element_blank(),
-  #           strip.background = element_rect(fill = "grey20"),
-  #           strip.text = element_text(color = "white")) 
-  # 
-```
-
-```{r}
-
-# There is already a time to orth variable. Does it match if I try to
-# calcuate from the dates?
-
-  # ggplot(data, aes(x = time_to_ortho, y = adm_to_orth, 
-  #                  color = as.Date(as.character(adm_date)))) +
-  #   geom_point(size = 2, alpha = 0.5) +
-  #   scale_color_viridis("Admit date", 
-  #                       begin = 0.2, option = "inferno", trans = "date") +
-  #     theme(panel.background = element_rect(fill = "grey20"),
-  #           panel.grid = element_blank(),
-  #           strip.background = element_rect(fill = "grey20"),
-  #           strip.text = element_text(color = "white")) 
+  data_frame(
+    Variable = name.1(descript),
+    Missing   = n.miss(descript),
+    "Mean SD or n (%)" = summary.1(descript),
+    "Median [IQR]" = med.iqr(descript),
+    "(Min, Max)" = min.max(descript)
+    ) %>% 
+  flextable() 
   
 ```
 
 
+## Time to event models
+
+### KM Plots (crude)
+
 ```{r}
-# Time to theatre
+
+  surplot <- function(sf, titl, brk = 24, lm = 120, show48 = TRUE, 
+                      gd = TRUE){
+    
+    hour48 <- summary(sf, times = 48)
+
+    p1 <- ggsurvplot(
+      sf, 
+      conf.int = FALSE, 
+      surv.median.line = "hv", 
+      risk.table = FALSE, 
+      break.x.by = brk, 
+      xlab = "Hours", 
+      xlim = c(0, lm)
+      ) 
   
-  # select(data, id, hosp, mdro, anticoag, adm_to_surg, time_to_surg, adm_date, 
-  #        adm_primary_surgery_date_time) %>%
-  # filter(hosp == "0600") %>%
-  # head() %>%
-  # mutate(id = reorder(id, time_to_surg)) %>%
-  # gather(type, date, adm_date, adm_primary_surgery_date_time) %>%
-  # ggplot(aes(x = date, y = id, shape = type, group = id, color = time_to_surg)) +
-  #   geom_point(size = 3) +
-  #   geom_line() +
-  #   scale_color_viridis()
+    if(gd == TRUE){
+      p2 <- p1$plot + 
+        ggtitle(titl) + 
+        scale_color_discrete() +
+        theme(plot.title = element_text(size = 12))
+    } else {
+      p2 <- p1$plot + 
+        ggtitle(titl) + 
+        scale_color_discrete(guide = FALSE) +
+        theme(plot.title = element_text(size = 12))
+    }
+    
+    if(show48 == TRUE){
+    p2 <- p2 +  
+      geom_segment(x = hour48$time, xend = hour48$time, 
+                   y = 0, yend = hour48$surv) +
+      geom_segment(x = 0, xend = hour48$time, 
+                   y = hour48$surv, yend = hour48$surv)
+    }
+    
+    return(p2)
+      
+  }
 
 ```
 
 
+```{r}
+
+  sf_ae_orth_mdro <- survfit(Surv(ae_orth_diff, out) ~ mdro, 
+                            data = data_4_pmain_5d)
+  sf_orth_surg_mdro <- survfit(Surv(orth_surg_diff, out) ~ mdro, 
+                              data = data_4_pmain_5d)
+  sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
+                            data = data_4_pmain_5d)
+  
+  surplot(sf_ae_orth_mdro, "AE to Orthopaedic Ward", 
+          show48 = FALSE) | 
+  surplot(sf_orth_surg_mdro, "Orthopaedic Ward to Surgery", 
+          show48 = FALSE, gd = FALSE) | 
+  surplot(sf_ae_surg_mdro, "AE to Surgery", 
+          show48 = FALSE, gd = FALSE)
+
+```
+
+Proportion AE to surgery >= 48 hours (compare survival proportions)
+
+```{r}
+
+  summary(sf_ae_surg_mdro, times = 48)
+
+```
+
+### Cox models (crude and adjusted)
+
+All the tables report HRs, so that values < 1 indicate *longer* times to surgery. 
+
+Times from AE (the total times)
+
+```{r}
+
+  s_ae_orth_acoag   <- with(data_4_pmain_5d, Surv(ae_orth_diff, out))
+  s_orth_surg_acoag <- with(data_4_pmain_5d, Surv(orth_surg_diff, out))
+  s_ae_surg_acoag   <- with(data_4_pmain_5d, Surv(ae_surg_diff, out))
+
+  ddist <- datadist(data_4_pmain_5d) # For RMS
+  options(datadist = "ddist")
+
+  cox1 <- coxph(s_ae_orth_acoag ~ mdro, data = data_4_pmain_5d)
+  cox2 <- coxph(s_ae_orth_acoag ~ mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_4_pmain_5d)
+  
+  cox3 <- coxph(s_orth_surg_acoag ~ mdro, data = data_4_pmain_5d)
+  cox4 <- coxph(s_orth_surg_acoag ~ mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_4_pmain_5d)
+  
+  cox5 <- coxph(s_ae_surg_acoag ~ mdro, data = data_4_pmain_5d)
+  cox6 <- coxph(s_ae_surg_acoag ~ mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_4_pmain_5d)
+
+  tab_model(
+    cox1, cox2, cox3, cox4, cox5, cox6,
+    dv.labels = c(
+      rep("AE to Orthopeadic Ward", 2), 
+      rep("Orthopeadic Ward to Surgry", 2), 
+      rep("AE to Surgery", 2)
+    )
+  )
+
+```
+
+
+
+# Alternative pathway analysis (n = `r nrow(data_4_palt_5d)`)
+
+## Outcomes 
+
+```{r}
+
+  labs <- c("AE to Surgery", "Surgery to Orth Ward", "AE to Orth Ward")
+
+  levs <- c("ae_surg_diff", "surg_orth_diff", "ae_orth_diff")
+
+  data_4_palt_5d_long <- data_4_palt_5d %>%
+    select(ae_surg_diff, surg_orth_diff, ae_orth_diff) %>%
+    gather(type, value) %>%
+    mutate(type = factor(type, levels = levs, labels = labs))
+  
+```
+
+
+```{r}
+  
+  ggplot(data_4_palt_5d_long, aes(y = value, x = type)) +
+    geom_jitter(height = 0, width = 0.2, alpha = 0.2) +
+    geom_boxplot(alpha = 0.2, width = 0.4, color = "white", 
+                 size = 1, outlier.alpha = 0) +
+    facet_wrap(~type, nrow = 1, scales = "free_x") +
+    ylab("Hours") +
+    theme(axis.text.x = element_blank(), 
+          panel.grid = element_blank(), 
+          panel.background = element_rect(fill = "grey")) +
+    xlab("") +
+    coord_cartesian(ylim = c(0, 240))
+```
+
+## Table 1
+
+```{r}
+
+  descript <- data_4_palt_5d %>%
+    select(
+      sex, age, marr_status, 
+      los, has_med_card, adm_asa_grade, 
+      ae_orth_diff, surg_orth_diff, ae_surg_diff, 
+      mdro, anticoag)
+
+  data_frame(
+    Variable = name.1(descript),
+    Missing   = n.miss(descript),
+    "Mean SD or n (%)" = summary.1(descript),
+    "Median [IQR]" = med.iqr(descript),
+    "(Min, Max)" = min.max(descript)
+    ) %>% 
+  flextable() 
+  
+```
+
+
+## Time to event models
+
+### KM Plots (crude)
+
+```{r}
+
+  
+  sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
+                            data = data_4_palt_5d)
+  sf_surg_orth_mdro <- survfit(Surv(surg_orth_diff, out) ~ mdro, 
+                              data = data_4_palt_5d)
+  sf_ae_orth_mdro <- survfit(Surv(ae_orth_diff, out) ~ mdro, 
+                            data = data_4_palt_5d)
+
+  
+  surplot(sf_ae_surg_mdro, "AE to Surgery", show48 = FALSE) | 
+  surplot(sf_surg_orth_mdro, "Surgery to Orthopaedic Ward", show48 = FALSE, 
+          gd = FALSE) | 
+  surplot(sf_ae_orth_mdro, "AE to Orthopaedic Ward", show48 = FALSE, 
+          gd = FALSE)
+
+```
+
+Proportion >= 48 hours (compare survival proportions)
+
+```{r}
+
+  summary(sf_ae_surg_mdro, times = 48)
+
+```
+
+
+### Cox models (crude and adjusted)
+
+All the tables report HRs, so that values < 1 indicate *longer* times to surgery. 
+
+```{r}
+
+  s_ae_surg_acoag   <- with(data_4_palt_5d, Surv(ae_surg_diff, out))
+  s_surg_orth_acoag <- with(data_4_palt_5d, Surv(surg_orth_diff, out))
+  s_ae_orth_acoag   <- with(data_4_palt_5d, Surv(ae_orth_diff, out))
+
+  ddist <- datadist(data_4_palt_5d) # For RMS
+  options(datadist = "ddist")
+
+  cox1 <- coxph(s_ae_surg_acoag ~ mdro, data = data_4_palt_5d)
+  cox2 <- coxph(s_ae_surg_acoag ~ mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_4_palt_5d)
+  
+  cox3 <- coxph(s_surg_orth_acoag ~ mdro, data = data_4_palt_5d)
+  cox4 <- coxph(s_surg_orth_acoag ~ mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_4_palt_5d)
+  
+  cox5 <- coxph(s_ae_orth_acoag ~ mdro, data = data_4_palt_5d)
+  cox6 <- coxph(s_ae_orth_acoag ~ mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_4_palt_5d)
+
+
+  tab_model(
+    cox1, cox2, cox3, cox4, cox5, cox6,
+    dv.labels = c(
+      rep("AE to Surgery", 2), 
+      rep("Surgry to Orthopeadic Ward", 2), 
+      rep("AE to Orthopeadic Ward", 2)
+    )
+  )
+
+
+```
+
+The notable result in the table above is that there is MDRO status is associated with substantial increases in the time between surgery and the orthopeadic ward, but that this association is explained away by adjustment for potential confounders, including hospital. 
+
+Here is the KM plot for that unadjusted effect in the `r nrow(data_4_palt_5d)` patients on the alternative pathway. 
+
+```{r}
+
+  sf_ae_orth_mdro <- survfit(Surv(ae_orth_diff, out) ~ mdro, 
+                            data = data_4_palt_5d)
+  
+
+  surplot(sf_ae_orth_mdro, "AE to Orthopaedic Ward", show48 = FALSE)
+   
+```
+
+However, this is really explained by hospital. 
+
+First, here is the KM plot for hospital for patients on the alterntive pathway. 
+
+```{r}
+
+  df <- group_by(data_4_palt_5d, hosp) %>%
+      summarise(mean_ae_orth = median(ae_orth_diff, na.rm = TRUE)) %>%
+      right_join(data_4_palt_5d, by = "hosp") %>%
+      mutate(hosp = reorder(factor(hosp), mean_ae_orth))
+
+  sf_ae_orth_mdro <- survfit(Surv(ae_orth_diff, out) ~ hosp, 
+                            data = df)
+
+  surplot(sf_ae_orth_mdro, "AE to Orthopaedic Ward", lm = 240, show48 = FALSE)
+  
+```
+
+You can see that the Mater and Drogheda are outliers with longer times to ward, and Tullamore and Connolly have relatively shorter times. 
+
+Now, if we look at the MDRO status of patients on the alt path in each hospital, ordered by their median times to ward (as they are ordered in the KM plot above), we see that a disproportionate number of MDRO cases happen to be in the hospitals with longer times. 
+
+```{r}
+
+  g1 <- ggplot(df, aes(x = hosp, fill = mdro)) +
+    geom_bar() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_fill_discrete(guide = FALSE) + 
+    ggtitle("1694 patients on alternative path")
+
+  g2 <- ggplot(df, aes(x = hosp, fill = mdro)) +
+    geom_bar(position = "fill") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+      scale_fill_discrete() +
+      ylab("Proportion") +
+      geom_hline(yintercept = 0.044, color = "white", linetype = "dashed", 
+                 size = 1.5) +
+      coord_cartesian(ylim = c(0, 0.5))
+  
+  g1 + g2 
+  
+```
+
+So the main issue here is that Mater and Drogheda, which both have > average % of MDRO also have longer delays in getting to the ward. Meanwhile Connolly has no mdro on the alt path and Midland has the average %, but they have relatively shorter time to ward. 
+
+Here is the same info, but now with patient level times to ward plotted. 
+
+```{r}
+
+  ggplot(df, aes(y = ae_orth_diff, color = mdro, 
+                             x = interaction(mdro, hosp))) + 
+    geom_jitter(width = 0.2) +
+    geom_boxplot(alpha = 0.1, color = "black", fill = "white") +
+    facet_wrap(~hosp, scales = "free_x", nrow = 1) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+          strip.text = element_blank()) +
+    xlab("MDRO status:Hospital") +
+    ylab("AE to Ward Time (hours)") +
+    ggtitle("AE to Ward in Alt path patients") 
+
+```
+
+This is the same plot, but with times log10 transformed so we can see them better.
+
+```{r}
+
+  ggplot(df, aes(y = ae_orth_diff, color = mdro, 
+                             x = interaction(mdro, hosp))) + 
+    scale_y_continuous(trans = "log10") +
+    geom_jitter(width = 0.2) +
+    geom_boxplot(alpha = 0.1, color = "black", fill = "white") +
+    facet_wrap(~hosp, scales = "free_x", nrow = 1) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+          strip.text = element_blank(), 
+          panel.grid = element_blank()) +
+    xlab("MDRO status:Hospital") +
+    ylab("AE to Ward Time (log10(hours))") +
+    ggtitle("AE to Ward in Alt path patients") +
+    annotation_logticks(sides = "l") 
+
+```
+
+Just for comparison, you can see that the times to surgery (all capped at < 5 days) aren't as variable, and so the impact of adjusting the Cox models for hospital isn't a prominent when AE to Surgery is the outcome. 
+
+```{r}
+    ggplot(df, aes(y = ae_surg_diff, color = mdro, 
+                             x = interaction(mdro, hosp))) + 
+    scale_y_continuous(trans = "log10") +
+    geom_jitter(width = 0.2) +
+    geom_boxplot(alpha = 0.1, color = "black", fill = "white") +
+    facet_wrap(~hosp, scales = "free_x", nrow = 1) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+          strip.text = element_blank(), 
+          panel.grid = element_blank()) +
+    xlab("MDRO status:Hospital") +
+    ylab("AE to Ward Time (log10(hours))") +
+    ggtitle("AE to Ward in Alt path patients") +
+    annotation_logticks(sides = "l") 
+```
+
+Same idea, reflected in the KM plot (less variability in time to surgery by hospital)
+
+```{r}
+
+
+  sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ hosp, 
+                            data = df)
+  
+  surplot(sf_ae_surg_mdro, "AE to Surgery", show48 = FALSE)
+```
+
+And a much smaller effect to start with (unadjusted KN plot for time to surgery by MDRO status in patients on the alternative path)
+
+```{r}
+
+  sf_ae_orth_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
+                            data = df)
+
+   surplot(sf_ae_orth_mdro, "AE to Surgery", show48 = FALSE)
+   
+```
+
+
+
+# Supplemental
+
+
+MDRO status by pathway
+```{r}
+
+  g1 <- data_3_paths %>%
+    select(id, mdro, pathway) %>%
+  ggplot(aes(x = pathway, fill = mdro)) +
+    geom_bar(position = "fill") + 
+    scale_fill_viridis(guide = FALSE, discrete = TRUE, end = 0.8) +
+    xlab("") +
+    ylab("Proportion of MDRO cases")
+
+  g2 <- data_3_paths %>%
+    select(id, mdro, pathway) %>%
+  ggplot(aes(x = pathway, fill = mdro)) +
+    geom_bar() + 
+    scale_fill_viridis(discrete = TRUE, end = 0.8) +
+    xlab("") +
+    ylab("Number of MDRO cases")
+  
+  g1 | g2
+  
+  rm(g1, g2)
+
+```
+
+```{r}
+ 
+   tbl <- with(data_3_paths, table(mdro, pathway))
+   cont_table_2(tbl) %>% pander()
+  
+```
+
+
+Relative number of patients on each pathway (n = `r nrow(data_3_5d)` patients with no missing time values and AE to surgery < 5 days)
+```{r}
+
+  df <- group_by(data_3_5d, hosp) %>%
+    summarise(hosp_n = n()) %>%
+    right_join(data_3_5d, by = "hosp") %>%
+    mutate(hosp = reorder(factor(hosp), hosp_n))
+
+  g1 <- ggplot(df, aes(x = hosp, fill = pathway)) +
+    geom_bar() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_fill_discrete(guide = FALSE)
+
+  g2 <- ggplot(df, aes(x = hosp, fill = pathway)) +
+    geom_bar(position = "fill") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+      scale_fill_discrete("") +
+      ylab("Proportion")
+
+  g1 + g2
+  
+```
+
+
+Logistic model for odds of surg > 48 hours for patients on the main pathyway
+
+```{r}
+
+  lgt1 <- glm(surg48 ~ mdro, 
+              data = data_4_pmain_5d, 
+              family = binomial(logit))
+  
+  lgt2 <- glm(surg48 ~ mdro + anticoag + rcs(age_z, 5) +
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+              data = data_4_pmain_5d, 
+              family = binomial(logit))
+  
+  tab_model(lgt1, lgt2, dv.labels = rep("AE to Surgery > 48 hours", 2))
+
+
+```
+
+
+```{r}
+
+  tar <- data_3_5d$id
+
+  data$sample <- "Out"
+  data$sample[data$id %in% tar] <- "In"
+  
+
+```
+
+
+In (both pathways) vs Out of sample characteristics
+
+```{r}
+
+  suppl.table <- data %>%
+    select(
+      arm = sample, sex, age, marr_status, los, has_med_card, 
+      adm_asa_grade, mdro, anticoag
+      )
+
+  out_sample <- filter(suppl.table, arm == "Out") %>% select(-arm)
+  in_sample <- filter(suppl.table, arm == "In") %>% select(-arm)
+
+  
+  data_frame("Variable" = name.1(select(suppl.table, -arm)),
+             "Observations" = as.numeric(n.miss(select(suppl.table, -arm))),
+             "Total"    = summary.2(select(suppl.table, -arm)),
+             "Out (n = 5115)" = summary.2(out_sample),
+             "In (n = 13003)" = summary.2(in_sample),
+             "Test p-value" = tests.2(suppl.table)) %>% 
+    knitr::kable()
+
+  
+```
 
 
 ```{r publication_qualityplots}
 
-  ggsave("XXX", device = "pdf", dpi = 600)
+#  ggsave("XXX", device = "pdf", dpi = 600)
 
 ```
 
@@ -374,7 +795,7 @@ This reduced dataset includes `r length(unique(long_times_2$id))` of `r nrow(dat
 
 ```{r code_book}
 
-  print(summarytools::dfSummary(data), method = "render")
+#  print(summarytools::dfSummary(data), method = "render")
 
 ```
 
