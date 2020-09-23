@@ -213,8 +213,6 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
 ```
 
 
-
-
 # Main pathway analysis (n = `r nrow(data_4_pmain_5d)`)
 
 ## Outcomes 
@@ -273,7 +271,6 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
   flextable() 
   
 ```
-
 
 ## Time to event models
 
@@ -393,8 +390,6 @@ Times from AE (the total times)
 
 ```
 
-
-
 # Alternative pathway analysis (n = `r nrow(data_4_palt_5d)`)
 
 ## Outcomes 
@@ -432,6 +427,7 @@ Times from AE (the total times)
     coord_cartesian(ylim = c(0, 240))
 
 ```
+
 Note: y axis truncated at 240 hours. 
 
 ## Table 1
@@ -669,15 +665,41 @@ And a much smaller effect to start with (unadjusted KN plot for time to surgery 
    
 ```
 
-
-
 # Supplemental
 
+## Pathway numbers
 
-MDRO status by pathway
+Relative number of patients on each pathway (n = `r nrow(data_3_5d)` patients with no missing time values and AE to surgery < 5 days)
+
 ```{r}
 
-  g1 <- data_3_paths %>%
+  df <- group_by(data_3_5d, hosp) %>%
+    summarise(hosp_n = n()) %>%
+    right_join(data_3_5d, by = "hosp") %>%
+    mutate(hosp = reorder(factor(hosp), hosp_n))
+
+  g1 <- ggplot(df, aes(x = hosp, fill = pathway)) +
+    geom_bar() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_fill_discrete(guide = FALSE) +
+      ylab("Count")
+
+  g2 <- ggplot(df, aes(x = hosp, fill = pathway)) +
+    geom_bar(position = "fill") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+      scale_fill_discrete("") +
+      ylab("Proportion")
+
+  g1 + g2
+  
+```
+
+
+## MDRO status by pathway
+
+```{r}
+
+  g1 <- data_3_5d %>%
     select(id, mdro, pathway) %>%
   ggplot(aes(x = pathway, fill = mdro)) +
     geom_bar(position = "fill") + 
@@ -685,7 +707,7 @@ MDRO status by pathway
     xlab("") +
     ylab("Proportion of MDRO cases")
 
-  g2 <- data_3_paths %>%
+  g2 <- data_3_5d %>%
     select(id, mdro, pathway) %>%
   ggplot(aes(x = pathway, fill = mdro)) +
     geom_bar() + 
@@ -701,37 +723,87 @@ MDRO status by pathway
 
 ```{r}
  
-   tbl <- with(data_3_paths, table(mdro, pathway))
+   tbl <- with(data_3_5d, table(mdro, pathway))
    cont_table_2(tbl) %>% pander()
   
 ```
 
 
-Relative number of patients on each pathway (n = `r nrow(data_3_5d)` patients with no missing time values and AE to surgery < 5 days)
+## Effects of pathway
+
+### KM plot - AE to Surgery
+
 ```{r}
 
-  df <- group_by(data_3_5d, hosp) %>%
-    summarise(hosp_n = n()) %>%
-    right_join(data_3_5d, by = "hosp") %>%
-    mutate(hosp = reorder(factor(hosp), hosp_n))
+  sf_ae_surg_path <- survfit(Surv(ae_surg_diff, out) ~ pathway, 
+                             data = data_3_5d)
 
-  g1 <- ggplot(df, aes(x = hosp, fill = pathway)) +
-    geom_bar() +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-    scale_fill_discrete(guide = FALSE)
+ surplot(sf_ae_surg_path, "AE to Surgery", show48 = FALSE) 
+ 
+```
 
-  g2 <- ggplot(df, aes(x = hosp, fill = pathway)) +
-    geom_bar(position = "fill") +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-      scale_fill_discrete("") +
-      ylab("Proportion")
+### Cox models - AE to Surgery
 
-  g1 + g2
+```{r}
+
+  s_ae_surg_pathway   <- with(data_3_5d, Surv(ae_surg_diff, out))
+
+  ddist <- datadist(data_3_5d) # For RMS
+  options(datadist = "ddist")
+
+  cox1 <- coxph(s_ae_surg_pathway ~ pathway, data = data_3_5d)
+  cox2 <- coxph(s_ae_surg_pathway ~ pathway + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_3_5d)
   
+
+  tab_model(
+    cox1, cox2,
+    dv.labels = c(
+      rep("AE to Surgery", 2)
+    )
+  )
+
 ```
 
 
-Logistic model for odds of surg > 48 hours for patients on the main pathyway
+### KM plot - AE to Ward
+
+```{r}
+
+  sf_ae_oth_path <- survfit(Surv(ae_orth_diff, out) ~ pathway, 
+                             data = data_3_5d)
+
+ surplot(sf_ae_oth_path, "AE to Ward", show48 = FALSE) 
+ 
+```
+
+### Cox models - AE to Ward
+
+```{r}
+
+  s_ae_orth_pathway   <- with(data_3_5d, Surv(ae_orth_diff, out))
+
+  cox1 <- coxph(s_ae_orth_pathway ~ pathway, data = data_3_5d)
+  cox2 <- coxph(s_ae_orth_pathway ~ pathway + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_3_5d)
+  
+  tab_model(
+    cox1, cox2,
+    dv.labels = c(
+      rep("AE to Ward", 2)
+    )
+  )
+
+```
+
+
+## Odds of longer waiting times (AE to surgery > 48 hours)
+
+Logistic model for odds of surg > 48 hours for patients on the main pathway
 
 ```{r}
 
@@ -750,6 +822,26 @@ Logistic model for odds of surg > 48 hours for patients on the main pathyway
 
 ```
 
+Logistic model for odds of surg > 48 hours for patients on the alternative pathway
+
+```{r}
+
+  lgt1 <- glm(surg48 ~ mdro, 
+              data = data_4_palt_5d, 
+              family = binomial(logit))
+  
+  lgt2 <- glm(surg48 ~ mdro + anticoag + rcs(age_z, 5) +
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+              data = data_4_palt_5d, 
+              family = binomial(logit))
+  
+  tab_model(lgt1, lgt2, dv.labels = rep("AE to Surgery > 48 hours", 2))
+
+
+```
+
+## In vs Out of sample characteristics
 
 ```{r}
 
@@ -761,8 +853,6 @@ Logistic model for odds of surg > 48 hours for patients on the main pathyway
 
 ```
 
-
-In (both pathways) vs Out of sample characteristics
 
 ```{r}
 
@@ -786,6 +876,8 @@ In (both pathways) vs Out of sample characteristics
 
   
 ```
+
+Qualitatively similar. At this sample size, you wouldn't be surprised to see "significant differences". 
 
 
 ```{r publication_qualityplots}
