@@ -826,6 +826,76 @@ Relative number of patients on each pathway (n = `r nrow(data_3_5d)` patients wi
 
 ```
 
+## Pathway by MDRO
+### KM plot - AE to Surgery
+
+```{r}
+
+  sf_ae_surg_path <- survfit(Surv(ae_surg_diff, out) ~ pathway + mdro, 
+                             data = data_3_5d)
+
+ surplot(sf_ae_surg_path, "AE to Surgery", show48 = FALSE) 
+ 
+```
+
+### Cox models - AE to Surgery
+
+```{r}
+
+  s_ae_surg_pathway   <- with(data_3_5d, Surv(ae_surg_diff, out))
+
+  ddist <- datadist(data_3_5d) # For RMS
+  options(datadist = "ddist")
+
+  cox1 <- coxph(s_ae_surg_pathway ~ pathway*mdro, data = data_3_5d)
+  cox2 <- coxph(s_ae_surg_pathway ~ pathway*mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_3_5d)
+  
+
+  tab_model(
+    cox1, cox2,
+    dv.labels = c(
+      rep("AE to Surgery", 2)
+    )
+  )
+
+```
+
+
+### KM plot - AE to Ward
+
+```{r}
+
+  sf_ae_oth_path <- survfit(Surv(ae_orth_diff, out) ~ pathway + mdro, 
+                             data = data_3_5d)
+
+ surplot(sf_ae_oth_path, "AE to Ward", show48 = FALSE) 
+ 
+```
+
+### Cox models - AE to Ward
+
+```{r}
+
+  s_ae_orth_pathway   <- with(data_3_5d, Surv(ae_orth_diff, out))
+
+  cox1 <- coxph(s_ae_orth_pathway ~ pathway*mdro, data = data_3_5d)
+  cox2 <- coxph(s_ae_orth_pathway ~ pathway*mdro + anticoag + rcs(age_z, 5) + 
+                  sex + adm_asa_grade + has_med_card +
+                  hosp, 
+                data = data_3_5d)
+  
+  tab_model(
+    cox1, cox2,
+    dv.labels = c(
+      rep("AE to Ward", 2)
+    )
+  )
+
+```
+
 
 ## Odds of longer waiting times (AE to surgery > 48 hours)
 
