@@ -31,7 +31,6 @@ output:
   library(patchwork)
   library(survival)
   library(survminer)
-# library(ggtern)
 
 ```
 
@@ -203,7 +202,6 @@ Finally, we want to remove patients with an AE to surgery time > 120 hours.
 
 ```
 
-Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` patients (`r round(nrow(data_3_5d) / nrow(data) * 100, 2)`% of the original dataset of `r nrow(data)` patients). 
 
 ```{r}
   data_4_pmain_5d <- filter(data_3_5d, path_1 == "Yes") 
@@ -212,6 +210,7 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
 
 ```
 
+Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` patients (`r round(nrow(data_3_5d) / nrow(data) * 100, 2)`% of the original dataset of `r nrow(data)` patients), with, `r nrow(data_4_pmain_5d)` on the main path; and `r nrow(data_4_palt_5d)` on the alternative path. 
 
 # Main pathway analysis (n = `r nrow(data_4_pmain_5d)`)
 
@@ -286,11 +285,12 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
     p1 <- ggsurvplot(
       sf, 
       conf.int = FALSE, 
-      surv.median.line = "hv", 
       risk.table = FALSE, 
       break.x.by = brk, 
       xlab = "Hours", 
-      xlim = c(0, lm)
+      xlim = c(0, lm), 
+      pval = TRUE, 
+      pval.coord = c(90, 1)
       ) 
   
     if(gd == TRUE){
@@ -324,19 +324,32 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
 
   sf_ae_orth_mdro <- survfit(Surv(ae_orth_diff, out) ~ mdro, 
                             data = data_4_pmain_5d)
-  sf_orth_surg_mdro <- survfit(Surv(orth_surg_diff, out) ~ mdro, 
-                              data = data_4_pmain_5d)
-  sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
-                            data = data_4_pmain_5d)
   
   surplot(sf_ae_orth_mdro, "AE to Orthopaedic Ward", 
-          show48 = FALSE) | 
-  surplot(sf_orth_surg_mdro, "Orthopaedic Ward to Surgery", 
-          show48 = FALSE, gd = FALSE) | 
-  surplot(sf_ae_surg_mdro, "AE to Surgery", 
-          show48 = FALSE, gd = FALSE)
+          show48 = FALSE) 
 
 ```
+
+```{r}
+
+  sf_orth_surg_mdro <- survfit(Surv(orth_surg_diff, out) ~ mdro, 
+                              data = data_4_pmain_5d)
+  
+  surplot(sf_orth_surg_mdro, "Orthopaedic Ward to Surgery", 
+          show48 = FALSE, gd = FALSE) 
+
+```
+
+
+```{r}
+
+  sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
+                            data = data_4_pmain_5d)
+
+  surplot(sf_ae_surg_mdro, "AE to Surgery", 
+          show48 = FALSE, gd = FALSE)
+```
+
 
 Proportion AE to surgery >= 48 hours (compare survival proportions)
 
@@ -462,15 +475,28 @@ Note: y axis truncated at 240 hours.
   
   sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
                             data = data_4_palt_5d)
+  
+  surplot(sf_ae_surg_mdro, "AE to Surgery", show48 = FALSE)
+
+```
+
+
+```{r}
+
   sf_surg_orth_mdro <- survfit(Surv(surg_orth_diff, out) ~ mdro, 
                               data = data_4_palt_5d)
+
+  surplot(sf_surg_orth_mdro, "Surgery to Orthopaedic Ward", show48 = FALSE, 
+          gd = FALSE) 
+
+```
+
+```{r}
+
   sf_ae_orth_mdro <- survfit(Surv(ae_orth_diff, out) ~ mdro, 
                             data = data_4_palt_5d)
 
   
-  surplot(sf_ae_surg_mdro, "AE to Surgery", show48 = FALSE) | 
-  surplot(sf_surg_orth_mdro, "Surgery to Orthopaedic Ward", show48 = FALSE, 
-          gd = FALSE) | 
   surplot(sf_ae_orth_mdro, "AE to Orthopaedic Ward", show48 = FALSE, 
           gd = FALSE)
 
