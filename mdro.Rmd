@@ -290,7 +290,7 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
       xlab = "Hours", 
       xlim = c(0, lm), 
       pval = TRUE, 
-      pval.coord = c(90, 1)
+      pval.coord = c(50, 1)
       ) 
   
     if(gd == TRUE){
@@ -346,8 +346,10 @@ Doing this takes the sample from `r nrow(data_3_paths)` to `r nrow(data_3_5d)` p
   sf_ae_surg_mdro <- survfit(Surv(ae_surg_diff, out) ~ mdro, 
                             data = data_4_pmain_5d)
 
-  surplot(sf_ae_surg_mdro, "AE to Surgery", 
-          show48 = FALSE, gd = FALSE)
+  f2a <- surplot(sf_ae_surg_mdro, "AE to Surgery", 
+          show48 = FALSE)
+  
+  f2a
 ```
 
 
@@ -355,7 +357,7 @@ Proportion AE to surgery >= 48 hours (compare survival proportions)
 
 ```{r}
 
-  summary(sf_ae_surg_mdro, times = 48)
+  summary(sf_ae_surg_mdro, times = 36)
 
 ```
 
@@ -478,7 +480,21 @@ Note: y axis truncated at 240 hours.
   
   surplot(sf_ae_surg_mdro, "AE to Surgery", show48 = FALSE)
 
+  f2b <- surplot(sf_ae_surg_mdro, "", show48 = FALSE, gd = FALSE)
+  
+
 ```
+
+```{r}
+
+  f2 <- f2a + f2b
+
+  f2
+  
+  ggsave()
+
+```
+
 
 
 ```{r}
@@ -486,8 +502,7 @@ Note: y axis truncated at 240 hours.
   sf_surg_orth_mdro <- survfit(Surv(surg_orth_diff, out) ~ mdro, 
                               data = data_4_palt_5d)
 
-  surplot(sf_surg_orth_mdro, "Surgery to Orthopaedic Ward", show48 = FALSE, 
-          gd = FALSE) 
+  surplot(sf_surg_orth_mdro, "Surgery to Orthopaedic Ward", show48 = FALSE) 
 
 ```
 
@@ -935,6 +950,91 @@ Logistic model for odds of surg > 48 hours for patients on the alternative pathw
   tab_model(lgt1, lgt2, dv.labels = rep("AE to Surgery > 48 hours", 2))
 
 
+```
+
+
+## Surgery < 36 hours by pathway and mdro status
+
+```{r}
+  t1 <- with(data_4_pmain_5d, table(mdro, ae_surg_diff <= 36))
+  t2 <- round(prop.table(t1, margin = 1), 4) * 100
+```
+
+The proportion of patients on pathway 1 who reached theatre within 36 hours of arrival to an orthopaedic hospital was `r t2[4]`% (n = `r t1[4]`) for MDRO colonised patients (n = `r sum(t1[c(2, 4)])`) and `r t2[3]`% (n = `r t1[3]`) for non-colonised patients (n = `r sum(t1[c(1, 3)])`). 
+
+
+```{r}
+  t1 <- with(data_4_palt_5d, table(mdro, ae_surg_diff <= 36))
+  t2 <- round(prop.table(t1, margin = 1), 4) * 100
+```
+
+The proportion of patients on pathway 2 who reached theatre within 36 hours of arrival to an orthopaedic hospital was `r t2[4]`% (n = `r t1[4]`) for MDRO colonised patients (n = `r sum(t1[c(2, 4)])`) and `r t2[3]`% (n = `r t1[3]`) for non-colonised patients (n = `r sum(t1[c(1, 3)])`).   
+
+## Ward < 4 hours by mdro status on pathway 1
+
+```{r}
+  t1 <- with(data_4_pmain_5d, table(mdro, ae_orth_diff <= 4))
+  t2 <- round(prop.table(t1, margin = 1), 4) * 100
+```
+
+The proportion of patients on pathway 1 who reached an orthopaedic ward within 4 hours of arrival to an orthopaedic hospital was `r t2[4]`% (n = `r t1[4]`) for MDRO colonised patients (n = `r sum(t1[c(2, 4)])`) and `r t2[3]`% (n = `r t1[3]`) for non-colonised patients (n = `r sum(t1[c(1, 3)])`). 
+
+## Time to surgery for path 1 and 2 by mdro status
+
+```{r}
+
+  descript1_y <- data_4_pmain_5d %>%
+    filter(mdro == "Yes") %>%
+    select(ae_surg_diff)
+
+  descript1_n <- data_4_pmain_5d %>%
+    filter(mdro == "No") %>%
+    select(ae_surg_diff)
+ 
+  descript2_y <- data_4_palt_5d %>%
+    filter(mdro == "Yes") %>%
+    select(ae_surg_diff)
+  
+   descript2_n <- data_4_palt_5d %>%
+    filter(mdro == "No") %>%
+    select(ae_surg_diff)
+   
+   summ_ <- function(data){
+     data_frame(
+        Variable = name.1(data),
+        Missing   = n.miss(data),
+        "Mean SD or n (%)" = summary.1(data),
+        "Median [IQR]" = med.iqr(data),
+        "(Min, Max)" = min.max(data)
+      ) %>% return()
+     }
+
+   bind_rows(
+     summ_(descript1_y), 
+     summ_(descript1_n), 
+     summ_(descript2_y), 
+     summ_(descript2_n), 
+   ) %>%
+  flextable()
+  
+```
+
+
+```{r}
+
+  descript <- data_4_pmain_5d %>%
+    filter(mdro == "No") %>%
+    select(ae_surg_diff)
+
+  data_frame(
+    Variable = name.1(descript),
+    Missing   = n.miss(descript),
+    "Mean SD or n (%)" = summary.1(descript),
+    "Median [IQR]" = med.iqr(descript),
+    "(Min, Max)" = min.max(descript)
+    ) %>% 
+  flextable() 
+  
 ```
 
 ## In vs Out of sample characteristics
